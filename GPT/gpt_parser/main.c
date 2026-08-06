@@ -55,10 +55,6 @@ static int read_at(FILE *image,
     return 1;
 }
 
-/*
- * GPT 헤더는 LBA 1에 있다.
- * 512바이트와 4096바이트 논리 섹터를 검사한다.
- */
 static uint32_t detect_sector_size(FILE *image)
 {
     const uint32_t candidates[] = {512, 4096};
@@ -92,15 +88,6 @@ static int is_zero_guid(const uint8_t *guid)
     return 1;
 }
 
-/*
- * GPT에 저장된 GUID를 과제 예시의 표준 표시 순서로 바꾼다.
- *
- * 디스크 바이트:
- * A2 A0 D0 EB E5 B9 33 44 87 C0 68 B6 B7 26 99 C7
- *
- * 출력:
- * EBD0A0A2B9E5443387C068B6B72699C7
- */
 static void format_guid(const uint8_t *guid, char output[33])
 {
     snprintf(
@@ -140,18 +127,10 @@ static const char *detect_filesystem(FILE *image,
         return "UNKNOWN";
     }
 
-    /*
-     * NTFS 부트 섹터의 OEM ID:
-     * 오프셋 3부터 "NTFS    "
-     */
     if (memcmp(boot_sector + 3, "NTFS    ", 8) == 0) {
         return "NTFS";
     }
 
-    /*
-     * FAT32 부트 섹터의 File System Type:
-     * 오프셋 82부터 "FAT32   "
-     */
     if (memcmp(boot_sector + 82, "FAT32   ", 8) == 0) {
         return "FAT32";
     }
@@ -163,11 +142,6 @@ static int parse_gpt(FILE *image, uint32_t sector_size)
 {
     uint8_t header[GPT_HEADER_MIN_SIZE];
 
-    /*
-     * GPT 헤더는 LBA 1에 있다.
-     *
-     * byte offset = 1 * sector_size
-     */
     if (!read_at(image,
                  sector_size,
                  header,
@@ -225,9 +199,6 @@ static int parse_gpt(FILE *image, uint32_t sector_size)
         uint64_t entry_offset =
             entry_array_offset + (uint64_t)i * entry_size;
 
-        /*
-         * Type GUID부터 Ending LBA까지는 처음 48바이트다.
-         */
         if (!read_at(image,
                      entry_offset,
                      entry,
@@ -236,22 +207,10 @@ static int parse_gpt(FILE *image, uint32_t sector_size)
             return 0;
         }
 
-        /*
-         * Partition Type GUID가 모두 0이면
-         * 사용하지 않는 엔트리다.
-         */
         if (is_zero_guid(entry)) {
             continue;
         }
 
-        /*
-         * GPT 엔트리 구조:
-         *
-         * 0~15  : Partition Type GUID
-         * 16~31 : Unique Partition GUID
-         * 32~39 : Starting LBA
-         * 40~47 : Ending LBA
-         */
         uint64_t start_lba =
             read_little_endian64(entry + 32);
 
@@ -264,17 +223,11 @@ static int parse_gpt(FILE *image, uint32_t sector_size)
             return 0;
         }
 
-        /*
-         * 시작과 마지막 LBA를 모두 포함하므로 +1
-         */
         uint64_t partition_size =
             end_lba - start_lba + 1;
 
         char guid_string[33];
 
-        /*
-         * 과제 예시는 Partition Type GUID를 출력한다.
-         */
         format_guid(entry, guid_string);
 
         const char *filesystem =
@@ -282,10 +235,6 @@ static int parse_gpt(FILE *image, uint32_t sector_size)
                               start_lba,
                               sector_size);
 
-        /*
-         * 정상 결과는 stdout에만 출력한다.
-         * 각 항목은 공백 한 칸으로 구분한다.
-         */
         printf("%s %s %" PRIu64 " %" PRIu64 "\n",
                guid_string,
                filesystem,
